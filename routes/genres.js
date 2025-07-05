@@ -1,68 +1,65 @@
 const express = require('express');
 const genreRouter = express.Router();
 
-const genres = require('../data/genres');
-const Joi = require('joi');
+const {GenreModel, validate} = require('../models/genre.model');
 
-function ValidateGenre(course) {
-    const schema = Joi.object({
-        name: Joi.string().required().min(3),
-    });
-
-    return schema.validate(course);
-}
-
-genreRouter.get('/', (req, res) => {
+genreRouter.get('/', async (req, res) => {
+    const genres = await GenreModel.find().sort('name')
     res.send(genres);
 })
 
-genreRouter.get('/:id', (req, res) => {
-    const genre = genres.find(genre=>genre.id===parseInt(req.params.id));
+genreRouter.get('/:id', async (req, res) => {
+    const genre = await GenreModel.findById(req.params.id);
     if (!genre) {
         res.status(400).send({ message: "Bad Data", data: req.params })
         return;
     }
-    res.send(genre);
+
+    res.status(200).send(genre)
+    return ;    
 })
 
-genreRouter.post('/', (req, res) => {
-    const { error } = ValidateGenre(req.body);
+genreRouter.post('/', async (req, res) => {
+    const { error } = validate(req.body);
     if (error) {
         res.status(400).send(error.details);
         return;
     }
 
-    const genre = {
-        id: (genres.length + 1) * Math.ceil(Math.random() * genres.length),
-        name: req.body.name
-    }
-    genres.push(genre);
-    res.status(200).send(genres)
+    let  genre = new GenreModel ({name: req.body.name})
+    genre = await genre.save(genre);
+    res.status(200).send(genre)
+    return;
 })
 
-genreRouter.delete('/:id', (req, res) => {
-    const genreIndex = genres.findIndex(genre => genre.id === parseInt(req.params.id))
-    if (genreIndex === -1) {
-        res.status(404).send(" not found")
+genreRouter.delete('/:id', async(req, res) => {
+    const genre = await genres.findByIdAndDelete(req.params.id)
+    if (!genre) {
+        res.status(404).send(" genre not found with given id")
         return;
     }
-
-    genres.splice(genreIndex, 1)
-    res.status(200).send({ message: "DeleteSuccess", data: genres })
+    res.status(200).send({ message: "DeleteSuccess", data: genre })
 });
 
-genreRouter.put('/:id', (req, res) => {
-    const genreExists = genres.find(genre => genre.id === parseInt(req.params.id))
-    if (!genreExists) {
-        res.status(400).send({ message: "Bad Data", data: req.params })
+genreRouter.put('/:id', async (req, res) => {
+     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+        res.status(400).send({message:"invalid id"});
         return;
     }
 
-    const updatedGenres = genres.map(genre =>
-        (genre.id === parseInt(req.params.id)) ? { ...genre, name: req.body.name } : genre
-    );
+    const { error } = validate(req.body);
+    if (error) {
+        res.status(400).send(error.details);
+        return;
+    }
 
-    res.status(200).send(updatedGenres);
+    const genre = await GenreModel.findByIdAndUpdate(req.params.id, {name: req.body.name}, {new:true});
+    if (!genre) {
+        res.status(400).send({ message: "Invalid Request Data", data: req.params })
+        return;
+    }
+
+    res.status(200).send(genre);
 });
 
 module.exports = genreRouter;
